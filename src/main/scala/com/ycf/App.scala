@@ -3,7 +3,7 @@ package com.ycf
 import java.io.{File, FileOutputStream, InputStream}
 import java.util.zip.ZipFile
 
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{SaveMode, SparkSession}
 
 
 /**
@@ -12,7 +12,8 @@ import org.apache.spark.sql.SparkSession
   */
 object App {
 
-  val tmpPath = "F:/project/load-data/data"
+//  val tmpPath = "F:/project/load-data/data"
+  val tmpPath = "/home/hadoop/data"
 
   def main(args: Array[String]): Unit = {
     val spark = SparkSession.builder()
@@ -21,18 +22,27 @@ object App {
       .getOrCreate()
 
 
-    val zipFile = new ZipFile("E:/BaiduNetdiskDownload/client_444_yongsheng.zip")
+//    val zipFile = new ZipFile("E:/BaiduNetdiskDownload/client_444_yongsheng.zip")
+    val zipFile = new ZipFile("/home/hadoop/client_444_yongsheng.zip")
+    unzip(zipFile, tmpPath)
 
-//    unzip(zipFile, tmpPath)
+    val df = spark.read.option(
+      "inferschema", "true"
+    ).option(
+      "header", "true"
+    ).option(
+      "encoding", "utf-8"
+    ).csv("s3://quant-warehouse/data/*")
+//    ).csv(s"file://$tmpPath/*")
 
-    val df = spark.read
-      .option("inferschema", "true")
-      .option("header", "true")
-      .option("encoding", "utf-8")
-      .csv(s"$tmpPath/*")
+//    df.printSchema()
+//    df.show()
 
-    df.printSchema()
-    df.show()
+    val tableName = "history_data"
+
+    df.write.format("orc").mode(SaveMode.Overwrite).partitionBy("Date").option(
+      "path", s"s3://quant-warehouse/test/hive/$tableName"
+    ).saveAsTable(tableName)
   }
 
   /** 完整路径版本
@@ -62,6 +72,18 @@ object App {
   //    }
   //  }
 
+  def writeFile(path: String, inputStream: InputStream): Unit = {
+    val b = new Array[Byte](1024)
+    var length = inputStream.read(b)
+    val output = new FileOutputStream(path, false)
+    while (length > 0) {
+      output.write(b, 0, length)
+      length = inputStream.read(b)
+    }
+    output.flush()
+    output.close()
+  }
+
   /**
     * 去除多余路径
     * @param zipFile
@@ -87,21 +109,11 @@ object App {
           new File(subPath).mkdirs()
           val subFile = new ZipFile(filePath)
           unzip(subFile, subPath)
+          println(s"filePath=$filePath")
+          new File(filePath).delete()
           new File(filePath).deleteOnExit()
         }
       }
     }
-  }
-
-  def writeFile(path: String, inputStream: InputStream): Unit = {
-    val b = new Array[Byte](1024)
-    var length = inputStream.read(b)
-    val output = new FileOutputStream(path, false)
-    while (length > 0) {
-      output.write(b, 0, length)
-      length = inputStream.read(b)
-    }
-    output.flush()
-    output.close()
   }
 }
