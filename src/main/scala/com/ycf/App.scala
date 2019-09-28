@@ -1,7 +1,7 @@
 package com.ycf
 
 import java.io.{File, FileOutputStream, InputStream}
-import java.util.zip.ZipFile
+import java.util.zip.{ZipException, ZipFile}
 
 import org.apache.spark.sql.{SaveMode, SparkSession}
 
@@ -13,7 +13,6 @@ import org.apache.spark.sql.{SaveMode, SparkSession}
 object App {
 
 //  val tmpPath = "F:/project/load-data/data"
-  val tmpPath = "/home/hadoop/data"
 
   def main(args: Array[String]): Unit = {
     val spark = SparkSession.builder()
@@ -21,9 +20,9 @@ object App {
       .appName("load-data")
       .getOrCreate()
 
-
+    val tmpPath = "/mnt/data"
 //    val zipFile = new ZipFile("E:/BaiduNetdiskDownload/client_444_yongsheng.zip")
-    val zipFile = new ZipFile("/home/hadoop/client_444_yongsheng.zip")
+    val zipFile = new ZipFile("/mnt/client_446_yongsheng.zip")
     unzip(zipFile, tmpPath)
 
     val df = spark.read.option(
@@ -40,7 +39,7 @@ object App {
 
     val tableName = "history_data"
 
-    df.write.format("orc").mode(SaveMode.Overwrite).partitionBy("Date").option(
+    df.write.format("orc").mode(SaveMode.Overwrite).partitionBy("","Date").option(
       "path", s"s3://quant-warehouse/test/hive/$tableName"
     ).saveAsTable(tableName)
   }
@@ -104,14 +103,21 @@ object App {
         val subPath = if (fileName.endsWith(".zip")) filePath.substring(0, filePath.indexOf(".zip")) else null
 
         println(s"FileName = ${fileName} ## SubPath = $subPath  ## filePath = $filePath")
-        writeFile(filePath, zipFile.getInputStream(element))
-        if (fileName.endsWith(".zip")) {
-          new File(subPath).mkdirs()
-          val subFile = new ZipFile(filePath)
-          unzip(subFile, subPath)
-          println(s"filePath=$filePath")
-          new File(filePath).delete()
-          new File(filePath).deleteOnExit()
+        try {
+          writeFile(filePath, zipFile.getInputStream(element))
+          if (fileName.endsWith(".zip")) {
+            new File(subPath).mkdirs()
+            val subFile = new ZipFile(filePath)
+            Thread.sleep(1000)
+            unzip(subFile, subPath)
+            println(s"filePath=$filePath")
+            new File(filePath).delete()
+            new File(filePath).deleteOnExit()
+          }
+        } catch {
+          case e: ZipException => {
+            println(filePath + " has been destoryed!!")
+          }
         }
       }
     }
